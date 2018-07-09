@@ -1,0 +1,3 @@
+python training.py -xd X.npy -yl Y.npy --epochs 100 --batchSize 100
+
+Obtained 93% accuracy
