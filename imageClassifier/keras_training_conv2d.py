@@ -1,7 +1,7 @@
 import argparse
 ###############################################
 parser = argparse.ArgumentParser()
-parser.add_argument('--dataFile', '-d', help='Datafile path', required=True)
+parser.add_argument('--data', '-d', help='Datafile path or directory path where all images are categorized', required=True)
 parser.add_argument('--epochs', '-e', help='Number of epochs', type=int, default=10)
 parser.add_argument('--batchSize', '-b', help='Batch size', type=int, default=100)
 parser.add_argument('--save', help='Save model name', default='model_keras_conv2d.h5')
@@ -12,11 +12,12 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
+from keras.preprocessing.image import ImageDataGenerator
 from keras import Sequential
 from keras.layers import Dense, Dropout, Conv2D, Flatten, MaxPool2D
 from keras.optimizers import SGD
 from keras.models import load_model
-
+from keras.callbacks import TensorBoard
 
 class ImageClassifier(object):
     """
@@ -36,8 +37,11 @@ class ImageClassifier(object):
         self.xTest = None
         self.yTrain = None
         self.yTest = None
-        self.numClasses = 0
+        self.numClasses = 3
         self.activation = 'relu'
+        self.tensorBoard = TensorBoard(log_dir='./tenosorboard', histogram_freq=0, write_graph=True, write_images=True)
+        self.trainDataGen = ImageDataGenerator(rescale=1./255, shear_range=0.2, zoom_range=0.2, horizontal_flip=True)
+        self.testDataGen = ImageDataGenerator(rescale=1./255)
 
     def createModel(self):
         """
@@ -46,7 +50,7 @@ class ImageClassifier(object):
         I've optimized below numbers considering my HW limitations
         """
         self.model = Sequential()
-        self.model.add(Conv2D(16, kernel_size=5, padding='same', input_shape=(250 , 250, 1, ), activation=self.activation))
+        self.model.add(Conv2D(16, kernel_size=5, padding='same', input_shape=(250 , 250, 3, ), activation=self.activation))
         self.model.add(MaxPool2D(pool_size=(2, 2)))
         self.model.add(Conv2D(8, kernel_size=5, padding='same', activation=self.activation))
         self.model.add(MaxPool2D(pool_size=(2, 2)))
@@ -62,7 +66,7 @@ class ImageClassifier(object):
         Loads the data from npz file and prepares it for feeding it to network
         """
         #I've used data file as npz. And images are stored in (250 * 250 * 1) i.e, GRAY format of CV2
-        self.data = np.load(self.args.dataFile)
+        self.data = np.load(self.args.data)
 
         # Loading the data in dataFrame of pandas
         self.df = pd.DataFrame(self.data.items()[0][1])
@@ -84,8 +88,18 @@ class ImageClassifier(object):
         # 3. Unknown (None of us or ppl whom the model had never seen)
         self.numClasses = self.y.shape[1]
 
+    def dataGenerator(self):
+        self.trainGenerator = self.trainDataGen.flow_from_directory(
+                                directory=self.args.data,
+                                target_size=(250, 250),
+                                color_mode='rgb',
+                                batch_size=30,
+                                class_mode='categorical',
+                                shuffle=True)
+
     def train(self):
-        history = self.model.fit(self.xTrain, self.yTrain, batch_size=self.args.batchSize, epochs=self.args.epochs, verbose=1)
+        #history = self.model.fit(self.xTrain, self.yTrain, batch_size=self.args.batchSize, epochs=self.args.epochs, verbose=1, callbacks=[self.tensorBoard])
+        history = self.model.fit_generator(self.trainGenerator, steps_per_epoch=50, epochs=self.args.epochs, callbacks=[self.tensorBoard])
 
         if self.args.save:
             print('Saving the model to {}'.format(self.args.save))
@@ -106,7 +120,8 @@ class ImageClassifier(object):
 
 if __name__ == "__main__":
     imageClassifier = ImageClassifier(args)
-    imageClassifier.loadAndPrepareData()
+    #imageClassifier.loadAndPrepareData()
     imageClassifier.createModel()
+    imageClassifier.dataGenerator()
     imageClassifier.train()
     imageClassifier.evaluate()
